@@ -86,10 +86,16 @@ class Formutil extends CI_Controller {
 				'2'=>'two',
 				'3'=>'three'
 			)));
+		// Button added (by default) to the bottom of the form
 		$this->formutil->add_submit(array(
 			'name'=>'submit',
 			'attributes'=>array('class'=>'btn btn-primary'
 			)));
+		// Button added to the top of the form by specifying the second argument
+		$this->formutil->add_submit(array(
+			'name'=>'submit',
+			'attributes'=>array('class'=>'btn btn-warning'
+			)), 'top');
 			
 			
 		if($this->formutil->validate('testform')){

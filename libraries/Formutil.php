@@ -32,7 +32,10 @@ class MY_Formutil {
 			"name"=>"form",
 			"action"=>'',
 			"template"=>"default_template",
-			"attributes"=>array()
+			"attributes"=>array(),
+			"top"=>array(),
+			"items"=>array(),
+			"bottom"=>array()
 		);
 		
 		if(isset($aFormInfo['template'])){
@@ -55,9 +58,10 @@ class MY_Formutil {
 		$this->sFocus = $sName;
 	}
 	 
-	private function _add_item($aItemInfo){
+	private function _add_item($aItemInfo, $sTarget = 'items'){
 		if($this->sFocus=='') die('FormUtil: You can\'t add an item if you haven\'t selected a form!');
-			
+		if($sTarget=='normal'||$sTarget=='center') $sTarget = 'items';
+		if(!in_array($sTarget, array('bottom', 'top', 'items'))) die('FormUtil: target ' . $aTarget . ' not specified.');
 		$aDefaultItem = array(
 			"type"=>"unknown",
 			"name"=>"unknown",
@@ -72,7 +76,7 @@ class MY_Formutil {
 		
 		$aItem = array_merge($aDefaultItem, $aItemInfo);
 			
-		$this->aForms[$this->sFocus]['items'][] =& $aItem;
+		$this->aForms[$this->sFocus][$sTarget][] =& $aItem;
 	}
 	
 	/**
@@ -236,36 +240,98 @@ class MY_Formutil {
 		$this->_add_item($aItemInfo);
 	}
 	
-	public function add_submit($aItemInfo){
+	public function add_submit($aItemInfo, $sTarget='bottom'){
 		// Checks	
 		if(!isset($aItemInfo['name'])) die('FormUtil: Specify a name of this item.');
 		if(!isset($aItemInfo['value'])) $aItemInfo['value'] = 'Submit';
 		// Typeset
 		$aItemInfo['type'] = 'submit';		
 		// Add item to the form
-		$this->_add_item($aItemInfo);
+		$this->_add_item($aItemInfo, $sTarget);
 	}
 	
-	public function add_html($sHtml){
+	public function add_html($sHtml, $sTarget='items'){
 		$aItemInfo['type'] = 'html';
 		$aItemInfo['value'] = $sHtml;
 		$this->_add_item($aItemInfo);
 	}
 	
+	private function _create_item(&$item, &$template){
+		switch($item['type']){
+			case "input":
+				$result = form_input(array_merge(array('name'=>$item['name'], 'value'=>$item['value']), $item['attributes']));
+				break;
+			case "password":
+				$result = form_password(array_merge(array('name'=>$item['name'], 'value'=>$item['value']), $item['attributes']));
+				break;
+			case "hidden":
+				$result = form_hidden(array($item['name']=>$item['value']));
+				break;
+			case "textarea":
+				$result = form_textarea(array_merge(array('name'=>$item['name'], 'value'=>$item['value']), $item['attributes']));
+				break;
+			case "dropdown":
+				$result = form_dropdown($item['name'], $item['options'], $item['value']);
+				break;
+			case "multiselect":
+				$result = form_multiselect($item['name'], $item['options'], $item['value']);
+				break;
+			case "radio":
+				$result = form_radio(array_merge(array('name'=>$item['name'], 'value'=>$item['value'], 'checked'=>$item['selected']), $item['attributes']));
+				break;
+			case "radiogroup":
+				$result = '';
+				foreach($item['options'] as $value=>$label){
+					$aItemData['item'] = form_radio(array_merge(array('name'=>$item['name'], 'value'=>$value, 'checked'=>$item['value']===$value), $item['attributes']));
+					$aItemData['label'] = $label;
+					$result .= $this->CI->parser->parse_string($template['radiogroup-item'], $aItemData, TRUE);
+				}
+				break;
+			case "checkbox":
+				$result = form_checkbox(array_merge(array('name'=>$item['name'], 'value'=>$item['value'], 'checked'=>$item['selected']), $item['attributes']));
+				break;
+			case "checkboxgroup":
+				$result = '';
+				foreach($item['options'] as $value=>$label){
+					$aItemData['item'] = form_checkbox(array_merge(array('name'=>$item['name'], 'value'=>$value, 'checked'=>in_array($value, $item['value'])), $item['attributes']));
+					$aItemData['label'] = $label;
+					$result .= $this->CI->parser->parse_string($template['checkboxgroup-item'], $aItemData, TRUE);
+				}
+				break;
+			case "submit":
+				$result = form_submit(array_merge(array('name'=>$item['name'], 'value'=>$item['value']), $item['attributes']));
+				break;
+			default:
+				$result = 'Type "' . $item['type'] . '" not recognized';
+				break;
+		}
+		return $result;
+	}
+	
 	/**
 	 * Generates the form with the given name and prints it to the standard output
 	 * @param $sFormName: The name of the form you want to generate
-	 * @
 	 */
 	public function generate_form($sFormName){
 		if(!isset($this->aForms[$sFormName])) die('FormUtil: form "' . $sFormName . '" is not set.');
 		
 		$form =& $this->aForms[$sFormName];
 		
-		echo "\n\n<!-- FORM GENERATED WITH FORMUTIL -->\n\n";
 		echo form_open($form['action'], $form['attributes']);
 		// Load the template configured for this form
 		$template = $this->CI->config->item($form['template']);	
+		
+		if(count($form['top'])>0){
+			$aTopdata['items']='';
+			
+			foreach($form['top'] as $item){
+				$aData['item'] = $this->_create_item($item, $template);
+				$aTopdata['items'] .= $this->CI->parser->parse_string($template['controls-top-wrapper'], $aData, TRUE);
+			}
+			echo $this->CI->parser->parse_string($template['controls-top'], $aTopdata, TRUE);
+		}
+		
+		
 		foreach($form['items'] as $item){
 			if($item['type']=='html'){
 				echo $item['value'];
@@ -279,56 +345,7 @@ class MY_Formutil {
 			$aData['label'] =& $item['label']==NULL ? '' : $item['label'];
 			$aData['label_item'] = $item['label']==NULL ? '' : form_label($item['label'], $item['name'], $template['label-attributes']);
 			$aData['value'] =& $item['value'];
-			
-			// Set item itself
-			switch($item['type']){
-				case "input":
-					$aData['item'] = form_input(array_merge(array('name'=>$item['name'], 'value'=>$item['value']), $item['attributes']));
-					break;
-				case "password":
-					$aData['item'] = form_password(array_merge(array('name'=>$item['name'], 'value'=>$item['value']), $item['attributes']));
-					break;
-				case "hidden":
-					$aData['item'] = form_hidden(array($item['name']=>$item['value']));
-					break;
-				case "textarea":
-					$aData['item'] = form_textarea(array_merge(array('name'=>$item['name'], 'value'=>$item['value']), $item['attributes']));
-					break;
-				case "dropdown":
-					$aData['item'] = form_dropdown($item['name'], $item['options'], $item['value']);
-					break;
-				case "multiselect":
-					$aData['item'] = form_multiselect($item['name'], $item['options'], $item['value']);
-					break;
-				case "radio":
-					$aData['item'] = form_radio(array_merge(array('name'=>$item['name'], 'value'=>$item['value'], 'checked'=>$item['selected']), $item['attributes']));
-					break;
-				case "radiogroup":
-					$aData['item'] = '';
-					foreach($item['options'] as $value=>$label){
-						$aItemData['item'] = form_radio(array_merge(array('name'=>$item['name'], 'value'=>$value, 'checked'=>$item['value']===$value), $item['attributes']));
-						$aItemData['label'] = $label;
-						$aData['item'] .= $this->CI->parser->parse_string($template['radiogroup-item'], $aItemData, TRUE);
-					}
-					break;
-				case "checkbox":
-					$aData['item'] = form_checkbox(array_merge(array('name'=>$item['name'], 'value'=>$item['value'], 'checked'=>$item['selected']), $item['attributes']));
-					break;
-				case "checkboxgroup":
-					$aData['item'] = '';
-					foreach($item['options'] as $value=>$label){
-						$aItemData['item'] = form_checkbox(array_merge(array('name'=>$item['name'], 'value'=>$value, 'checked'=>in_array($value, $item['value'])), $item['attributes']));
-						$aItemData['label'] = $label;
-						$aData['item'] .= $this->CI->parser->parse_string($template['checkboxgroup-item'], $aItemData, TRUE);
-					}
-					break;
-				case "submit":
-					$aData['item'] = form_submit(array_merge(array('name'=>$item['name'], 'value'=>$item['value']), $item['attributes']));
-					break;
-				default:
-					$aData['item'] = 'Type "' . $item['type'] . '" not recognized';
-					break;
-			}
+			$aData['item'] = $this->_create_item($item, $template);
 			
 			// Get item specific chunck, if it exists	
 			if(isset($template['item-' . $item['type']])){
@@ -338,8 +355,19 @@ class MY_Formutil {
 				echo $this->CI->parser->parse_string($template['item'], $aData, TRUE);
 			}
 		}
-		echo form_close();
-		echo "\n\n<!-- END OF FORM -->\n\n";	
+		
+		if(count($form['bottom'])>0){
+			$aBottomdata['items']='';
+			
+			foreach($form['bottom'] as $item){
+				$aData['item'] = $this->_create_item($item, $template);
+				$aBottomdata['items'] .= $this->CI->parser->parse_string($template['controls-bottom-wrapper'], $aData, TRUE);
+			}
+			echo $this->CI->parser->parse_string($template['controls-bottom'], $aBottomdata, TRUE);
+		}
+		
+		
+		echo form_close();	
 	}
 
 	/**
@@ -368,6 +396,12 @@ class MY_Formutil {
 		}
 	}
 	
+	/**
+	 * Returns the POST or GET input of the form with the given name.
+	 * If there was no data, then this function returns an empty array.
+	 * @param $sName string The name of the form to get the input from
+	 * @return array An array which contains the input of the given form.
+	 */
 	public function get_input($sName){
 		if(!isset($this->aForms[$sName])) die('FormUtil: You can only get data from an existing form!');
 		$aInput = array();
@@ -379,16 +413,39 @@ class MY_Formutil {
 		return $aInput;
 	}
 	
+	/**
+	 * Get a single POST or GET input value
+	 * @param $sItemName string The name of the iten you want to get the input value of.
+	 * @return mixed The input corresponding to this item or FALSE if there was no input.
+	 */
 	public function get_item_input($sItemName){
 		$sItemName = $this->_fetch_variable_name($sItemName);
 		return $this->CI->input->get_post($sItemName);;
 	}
 	
-	/**
-	 * DEBUG FUNCTION
+	/** 
+	 * Get the value of this item as displayed in the form. This is NOT the post/get input value.
+	 * It's easy to see that if there is no post/get data, then this function returns
+	 * the default value.
+	 * @param $sItemName string The name of the iten you want to get the value of.
+	 * @return mixed The value corresponding to this item or FALSE if the item doesn't exist.
 	 */
-	public function get_forms(){
-		return $this->aForms;
+	public function get_item_value($sItemName){
+		$found = FALSE;
+		$value = FALSE;
+		$i = 0; $j = 0;
+		while(!$found && $i<count($this->$aForms)){
+			$form =& $this->$aForms[$i];
+			while(!$found && $j<count($form['items'])){
+				$item =& $form['items'][$j];
+				if($item['name']==$sItemName){
+					$value=$item['value'];
+					$found = TRUE;
+				}
+			}
+			
+		}
+		return $value;
 	}
 }
 
