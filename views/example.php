@@ -5,6 +5,7 @@
     <title>FormUtil Example</title>
 
     <!-- Styles -->
+    <!-- The current template uses the Twitter Bootstrap style to style the form -->
     <link href="<?php echo base_url('assets/css/bootstrap.css'); ?>" rel="stylesheet" type="text/css">
     <link href="<?php echo base_url('assets/css/bootstrap-responsive.css'); ?>" rel="stylesheet" type="text/css">
     

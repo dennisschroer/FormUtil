@@ -240,6 +240,18 @@ class MY_Formutil {
 		$this->_add_item($aItemInfo);
 	}
 	
+	public function add_wysiwyg($aItemInfo){
+		// Checks		
+		if(!isset($aItemInfo['name'])) die('FormUtil: Specify a name of this item.');
+		if(!isset($aItemInfo['label'])) $aItemInfo['label'] = $aItemInfo['name'];
+		// Typeset
+		$aItemInfo['type'] = 'wysiwyg';
+		// Input check
+		$aItemInfo['value'] = $this->_check_input($aItemInfo['name'], $aItemInfo['value']);
+		// Add item to the form
+		$this->_add_item($aItemInfo);
+	}
+	
 	public function add_submit($aItemInfo, $sTarget='bottom'){
 		// Checks	
 		if(!isset($aItemInfo['name'])) die('FormUtil: Specify a name of this item.');
@@ -300,6 +312,18 @@ class MY_Formutil {
 				break;
 			case "submit":
 				$result = form_submit(array_merge(array('name'=>$item['name'], 'value'=>$item['value']), $item['attributes']));
+				break;
+			case "wysiwyg":
+				$result = form_textarea(array_merge(array('name'=>$item['name'], 'value'=>$item['value']), $item['attributes']));
+				$result .= "<script>CKEDITOR.replace( '". $item['name'] . "'";
+				if(isset($item['config'])&&is_array($item['config'])){
+					$result .= ", {";
+					foreach($item['config'] as $key=>$value){
+						$result .= $key . ": '" . $value . "',";						 
+					}
+					$result .= "}";
+				}
+				$result .= " );</script>";
 				break;
 			default:
 				$result = 'Type "' . $item['type'] . '" not recognized';
